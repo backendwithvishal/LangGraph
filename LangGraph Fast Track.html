@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>LangGraph Fast Track</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f7f8fa;--fg:#14171f;--card:#fff;--mut:#5d6575;--ac:#0f766e;--bd:#dde1e8;--code:#0f172a;--ok:#15803d;--bad:#b91c1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1116;--fg:#e6e9ef;--card:#171b22;--mut:#9aa3b2;--ac:#2dd4bf;--bd:#2a303a;--code:#07090d;--ok:#4ade80;--bad:#f87171}}
+:root[data-theme="dark"]{--bg:#0e1116;--fg:#e6e9ef;--card:#171b22;--mut:#9aa3b2;--ac:#2dd4bf;--bd:#2a303a;--code:#07090d;--ok:#4ade80;--bad:#f87171}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--bd);background:var(--card);flex-wrap:wrap}
+h1{font-size:18px;margin:0}.sp{flex:1}
+.bar{width:160px;height:8px;background:var(--bd);border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--ac);transition:width .3s}
+button{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:8px;padding:6px 12px}
+button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+.wrap{display:flex;max-width:1100px;margin:auto}
+nav{width:260px;padding:14px;flex-shrink:0}
+nav input{width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);margin-bottom:8px}
+nav a{display:flex;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;color:var(--fg);font-size:14px}
+nav a:hover{background:var(--bd)}nav a.on{background:var(--ac);color:#fff}
+main{flex:1;padding:18px;min-width:0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
+h2{margin:0 0 4px}.tag{color:var(--mut);font-size:14px}
+pre{background:var(--code);color:#e2e8f0;padding:14px;border-radius:10px;overflow-x:auto;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;margin:8px 0 0}
+ul{padding-left:20px;margin:6px 0}.k{border-left:4px solid var(--ac)}
+.opt{display:block;width:100%;text-align:left;margin:6px 0}.opt.r{border-color:var(--ok)}.opt.w{border-color:var(--bad)}
+.row{display:flex;gap:8px;justify-content:space-between;margin-top:12px}
+@media(max-width:760px){.wrap{display:block}nav{width:100%;max-height:200px;overflow-y:auto}}
+</style></head><body>
+<header><h1>🕸️ LangGraph Fast Track</h1><span class="tag" id="pt"></span><div class="bar"><i id="pb"></i></div><span class="sp"></span><button id="th">Theme</button></header>
+<div class="wrap"><nav><input id="q" placeholder="Search topics…"><div id="list"></div></nav><main id="m"></main></div>
+<script>
+const L=[
+{t:"1. What & why",s:"Graphs for stateful agents",b:["LangGraph is a low-level library for building stateful, long-running agent workflows as a graph.","Three ideas: State (shared data), Nodes (functions that read state and return updates), Edges (which node runs next).","Use it when you need loops, branching, memory, human approval or multi-agent flows; a plain chain is enough for straight-line tasks.","Install: pip install -U langgraph langchain"],c:`# mental model
+# State  -> a dict-like schema
+# Node   -> def fn(state) -> partial state update
+# Edge   -> fixed or conditional transition
+# START / END -> special entry and exit markers`,q:["A node in LangGraph is…","a Python function that returns a state update","a database table","a prompt template"]},
+{t:"2. Hello graph",s:"Build, compile, invoke",b:["Create StateGraph(StateSchema), add nodes, connect with edges, then compile().","compile() returns a runnable: use invoke(), stream(), ainvoke().","Nodes return only the keys they change; LangGraph merges them into state."],c:`from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+
+class State(TypedDict):
+    text: str
+
+def shout(state: State):
+    return {"text": state["text"].upper()}
+
+g = StateGraph(State)
+g.add_node("shout", shout)
+g.add_edge(START, "shout")
+g.add_edge("shout", END)
+app = g.compile()
+
+print(app.invoke({"text": "hi"}))  # {'text': 'HI'}`,q:["What must you call before invoke()?","compile()","run()","build_all()"]},
+{t:"3. State & reducers",s:"How updates merge",b:["By default a returned key overwrites the old value.","A reducer changes that: Annotated[type, fn] combines old and new (e.g. append to a list).","operator.add appends lists; add_messages appends and de-duplicates chat messages by id.","State can be TypedDict, dataclass or Pydantic model. You can set separate input/output schemas."],c:`import operator
+from typing import Annotated, TypedDict
+
+class State(TypedDict):
+    logs: Annotated[list[str], operator.add]  # append
+    count: int                                # overwrite
+
+def a(state): return {"logs": ["a ran"], "count": 1}
+def b(state): return {"logs": ["b ran"], "count": 2}
+# final: logs=['a ran','b ran'], count=2`,q:["Without a reducer, a returned key…","overwrites the old value","is appended","raises an error"]},
+{t:"4. Nodes & edges",s:"Wiring the flow",b:["add_node(name, fn) registers a node; add_edge(a, b) is a fixed transition.","Nodes can take (state, config) to read runtime config such as thread_id.","Edges from START choose the entry point; edges to END finish the run.","Several edges out of one node run the targets in parallel."],c:`g.add_node("fetch", fetch)
+g.add_node("clean", clean)
+g.add_edge(START, "fetch")
+g.add_edge("fetch", "clean")
+g.add_edge("clean", END)
+
+# shortcut for a simple chain
+g.add_sequence([fetch, clean])`,q:["Which edge starts a graph?","START -> first node","END -> first node","compile -> node"]},
+{t:"5. Conditional edges & loops",s:"Routing and cycles",b:["add_conditional_edges(node, router) calls router(state) and follows the name it returns.","Routers return a node name, END, or a list of names.","Cycles are what make agents: route back to an earlier node until a condition is met.","Guard loops: LangGraph raises GraphRecursionError after 25 steps by default; change it with config {'recursion_limit': n}."],c:`def route(state) -> str:
+    return "retry" if state["score"] < 8 else END
+
+g.add_conditional_edges(
+    "grade", route,
+    {"retry": "write", END: END},
+)
+g.add_edge("write", "grade")  # loop`,q:["What makes a LangGraph loop safe?","A router exit condition plus recursion_limit","Nothing, loops are unlimited","Only using END"]},
+{t:"6. Chat with an LLM",s:"MessagesState",b:["MessagesState is a prebuilt state with a messages list using the add_messages reducer.","Return {'messages': [reply]} and it is appended to the history.","init_chat_model('provider:model') gives a provider-agnostic chat model (needs the provider's package and API key)."],c:`from langgraph.graph import StateGraph, MessagesState, START, END
+from langchain.chat_models import init_chat_model
+
+llm = init_chat_model("anthropic:claude-sonnet-4-5")
+
+def chat(state: MessagesState):
+    return {"messages": [llm.invoke(state["messages"])]}
+
+g = StateGraph(MessagesState)
+g.add_node("chat", chat)
+g.add_edge(START, "chat")
+g.add_edge("chat", END)
+app = g.compile()
+app.invoke({"messages": [("user", "Hello!")]})`,q:["MessagesState.messages uses which reducer?","add_messages","operator.mul","none"]},
+{t:"7. Tools & the agent loop",s:"ReAct pattern",b:["Bind tools to the model; if it answers with tool calls, route to ToolNode, then back to the model.","tools_condition routes to 'tools' when tool calls exist, otherwise to END.","Shortcut: langgraph.prebuilt.create_react_agent(model, tools) builds this loop for you (newer LangChain also offers create_agent; check current docs)."],c:`from langchain_core.tools import tool
+from langgraph.prebuilt import ToolNode, tools_condition
+
+@tool
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+llm_t = llm.bind_tools([add])
+def agent(state: MessagesState):
+    return {"messages": [llm_t.invoke(state["messages"])]}
+
+g = StateGraph(MessagesState)
+g.add_node("agent", agent)
+g.add_node("tools", ToolNode([add]))
+g.add_edge(START, "agent")
+g.add_conditional_edges("agent", tools_condition)
+g.add_edge("tools", "agent")
+app = g.compile()`,q:["After ToolNode runs, flow goes…","back to the agent","to END always","to START"]},
+{t:"8. Memory: checkpointers",s:"Threads & persistence",b:["A checkpointer saves state after each step. Pass thread_id in config to keep separate conversations.","InMemorySaver is for dev; use SqliteSaver or PostgresSaver (separate packages) in production.","Checkpoints enable resuming, time travel (get_state_history) and fault tolerance."],c:`from langgraph.checkpoint.memory import InMemorySaver
+
+app = g.compile(checkpointer=InMemorySaver())
+cfg = {"configurable": {"thread_id": "user-1"}}
+
+app.invoke({"messages": [("user", "I'm Sam")]}, cfg)
+out = app.invoke({"messages": [("user", "Who am I?")]}, cfg)
+
+app.get_state(cfg)          # latest snapshot
+list(app.get_state_history(cfg))  # time travel`,q:["What separates two conversations?","thread_id","node name","reducer"]},
+{t:"9. Human-in-the-loop",s:"interrupt & Command",b:["interrupt(value) pauses the graph and surfaces value to the caller. Requires a checkpointer.","Resume with Command(resume=answer): that answer becomes interrupt()'s return value.","Command(goto=..., update=...) can also route and update state from inside a node.","The node restarts from its beginning on resume, so keep code before interrupt() side-effect free."],c:`from langgraph.types import interrupt, Command
+
+def approve(state):
+    ok = interrupt({"question": "Send the email?"})
+    return {"approved": ok}
+
+app = g.compile(checkpointer=InMemorySaver())
+cfg = {"configurable": {"thread_id": "t1"}}
+r = app.invoke({"draft": "Hi"}, cfg)   # pauses
+print(r["__interrupt__"])
+app.invoke(Command(resume=True), cfg)  # continues`,q:["interrupt() needs…","a checkpointer","a database server","streaming on"]},
+{t:"10. Streaming",s:"Live output",b:["stream() yields progress instead of waiting for the final result.","Modes: values (full state each step), updates (node deltas), messages (LLM tokens), custom (your own events), debug.","Pass a list of modes to get several at once; use astream() in async code."],c:`for chunk in app.stream(
+    {"messages": [("user", "Hi")]},
+    stream_mode="updates",
+):
+    print(chunk)   # {'node_name': {...update...}}
+
+for tok, meta in app.stream(inputs, stream_mode="messages"):
+    print(tok.content, end="")`,q:["Which mode streams LLM tokens?","messages","values","debug only"]},
+{t:"11. Parallelism & Send",s:"Fan-out / map-reduce",b:["Multiple outgoing edges run nodes in the same superstep; join them with a reducer on shared keys.","Send(node, payload) creates a dynamic number of parallel tasks, each with its own input.","Typical use: split a list, process every item in parallel, merge results with operator.add."],c:`from langgraph.types import Send
+
+class State(TypedDict):
+    items: list[str]
+    results: Annotated[list[str], operator.add]
+
+def fan_out(state):
+    return [Send("work", {"item": i}) for i in state["items"]]
+
+def work(s):  # receives the Send payload
+    return {"results": [s["item"].upper()]}
+
+g.add_node("work", work)
+g.add_conditional_edges(START, fan_out, ["work"])
+g.add_edge("work", END)`,q:["Send is used to…","spawn dynamic parallel tasks","save state","stream tokens"]},
+{t:"12. Subgraphs & multi-agent",s:"Compose graphs",b:["A compiled graph can be a node in another graph: parent.add_node('sub', sub_app).","Supervisor pattern: one agent decides which worker runs next. Handoff pattern: agents pass control with Command(goto=...).","Each agent can be its own subgraph with private state, which keeps large systems manageable."],c:`sub = sub_builder.compile()
+
+parent = StateGraph(State)
+parent.add_node("research", sub)       # graph as node
+parent.add_edge(START, "research")
+
+# handoff between agents
+def agent_a(state) -> Command[Literal["agent_b", "__end__"]]:
+    return Command(goto="agent_b", update={"note": "done"})`,q:["A subgraph is added as…","a node","an edge","a reducer"]},
+{t:"13. Long-term memory (Store)",s:"Across threads",b:["Checkpointers remember one thread. A Store keeps data across threads, e.g. user preferences.","Items live under a namespace tuple plus a key. Use store.put, store.get, store.search.","InMemoryStore for dev; a Postgres-backed store for production."],c:`from langgraph.store.memory import InMemoryStore
+
+store = InMemoryStore()
+app = g.compile(checkpointer=InMemorySaver(), store=store)
+
+def node(state, *, store):
+    store.put(("users", "u1"), "prefs", {"lang": "en"})
+    item = store.get(("users", "u1"), "prefs")
+    return {}`,q:["Memory shared across threads lives in…","the Store","the checkpointer","the reducer"]},
+{t:"14. Debug & deploy",s:"Studio, CLI, LangSmith",b:["Visualize: app.get_graph().draw_mermaid() prints a diagram.","Dev server + Studio: pip install 'langgraph-cli[inmem]', add langgraph.json, run langgraph dev.","Trace runs with LangSmith by setting LANGSMITH_TRACING=true and LANGSMITH_API_KEY.","Deploy with LangGraph Platform or your own FastAPI plus a Postgres checkpointer."],c:`# langgraph.json
+{
+  "dependencies": ["."],
+  "graphs": {"agent": "./app.py:app"},
+  "env": ".env"
+}
+# terminal
+langgraph dev`,q:["Which command starts the local dev server?","langgraph dev","langgraph build","langgraph run all"]}
+];
+let cur=0,done=new Set();
+try{done=new Set(JSON.parse(localStorage.getItem("lg_done")||"[]"))}catch(e){}
+const $=id=>document.getElementById(id);
+function save(){try{localStorage.setItem("lg_done",JSON.stringify([...done]))}catch(e){}}
+function nav(){const f=$("q").value.toLowerCase();$("list").innerHTML="";
+L.forEach((l,i)=>{if(f&&!(l.t+l.s+l.b.join()).toLowerCase().includes(f))return;
+const a=document.createElement("a");a.className=i==cur?"on":"";a.textContent=(done.has(i)?"✅ ":"")+l.t;a.onclick=()=>{cur=i;render()};$("list").appendChild(a)});
+$("pb").style.width=done.size/L.length*100+"%";$("pt").textContent=done.size+"/"+L.length+" done"}
+function render(){const l=L[cur],m=$("m");m.innerHTML="";
+const c=document.createElement("div");c.className="card";
+c.innerHTML="<h2></h2><div class='tag'></div><ul></ul>";
+c.querySelector("h2").textContent=l.t;c.querySelector(".tag").textContent=l.s;
+l.b.forEach(x=>{const li=document.createElement("li");li.textContent=x;c.querySelector("ul").appendChild(li)});
+const pre=document.createElement("pre");pre.textContent=l.c;c.appendChild(pre);
+const cp=document.createElement("button");cp.textContent="Copy code";cp.style.marginTop="8px";
+cp.onclick=()=>{try{navigator.clipboard.writeText(l.c);cp.textContent="Copied"}catch(e){}};c.appendChild(cp);
+m.appendChild(c);
+const qc=document.createElement("div");qc.className="card k";
+const qh=document.createElement("b");qh.textContent="Quick check: "+l.q[0];qc.appendChild(qh);
+const opts=l.q.slice(1).map((t,i)=>({t,ok:i==0}));
+opts.sort((a,b)=>a.t.localeCompare(b.t));
+opts.forEach(o=>{const b=document.createElement("button");b.className="opt";b.textContent=o.t;
+b.onclick=()=>{b.classList.add(o.ok?"r":"w");if(o.ok){done.add(cur);save();nav()}};qc.appendChild(b)});
+m.appendChild(qc);
+const r=document.createElement("div");r.className="row";
+const pv=document.createElement("button");pv.textContent="← Prev";pv.onclick=()=>{if(cur>0){cur--;render()}};
+const nx=document.createElement("button");nx.className="p";nx.textContent="Next →";nx.onclick=()=>{if(cur<L.length-1){cur++;render()}};
+r.append(pv,nx);m.appendChild(r);nav();scrollTo(0,0)}
+$("q").oninput=nav;
+$("th").onclick=()=>{const r=document.documentElement,d=getComputedStyle(r).getPropertyValue("--bg").trim()=="#0e1116";r.dataset.theme=d?"light":"dark"};
+render();
+</script></body></html>

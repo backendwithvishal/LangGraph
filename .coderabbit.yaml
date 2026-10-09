@@ -1,0 +1,15 @@
+# .coderabbit.yaml
+language: "en-US"
+reviews:
+  profile: "assertive" # 'chill' or 'assertive' for deeper checks
+  high_level_summary: true
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+file_path_instructions:
+  - path: "**/*.py"
+    instructions: |
+      - Verify proper state handling and schema typing for LangGraph nodes.
+      - Check for unhandled exceptions and async/await correctness.
+      - Enforce clean Python docstrings and type hints.
